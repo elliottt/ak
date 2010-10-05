@@ -1,14 +1,19 @@
 module Ak.Types
-    ( Task(priority, description)
+    ( Priority
+    , Descr
+    , Task(priority, description)
     , task
     )
 where
 
+type Priority = Int
+type Descr    = String
+
 data Task =
-    Task { priority :: Int
-         , description :: String
+    Task { priority    :: Priority
+         , description :: Descr
          }
     deriving (Show)
 
-task :: Int -> String -> Task
+task :: Priority -> Descr -> Task
 task = Task
