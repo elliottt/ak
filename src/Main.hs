@@ -1,7 +1,17 @@
 module Main where
 
+import Prelude hiding (catch)
+import Control.Exception (catch)
+
 import Control.Applicative
     ( (<$>)
+    )
+import Control.Monad
+    ( forM_
+    , when
+    )
+import Data.Maybe
+    ( listToMaybe
     )
 import System.Environment
     ( getArgs
@@ -13,31 +23,49 @@ import System.FilePath
     ( FilePath
     , (</>)
     )
+import System.Exit
+    ( exitFailure
+    )
 import Ak.Types
-    ( task
+    ( Command(..)
+    , CommandError(..)
     )
-import Ak.IO
-    ( appendTask
-    , readTasks
-    )
+import qualified Ak.Commands as Commands
 
 taskFile :: IO FilePath
 taskFile = (</> ".ak-tasks") <$> getHomeDirectory
 
-showTasks :: FilePath -> IO ()
-showTasks path = do
-  print =<< readTasks path `catch` (const $ return [])
+usage :: [Command] -> IO ()
+usage commands = do
+  putStrLn "Usage: ak <command> [args]"
+  forM_ commands $ \cmd ->
+      putStrLn $ concat [ "  "
+                        , cmdUsage cmd
+                        , " - "
+                        , cmdDescription cmd
+                        ]
 
-usage :: IO ()
-usage = do
-  putStrLn "Usage: ak [<priority> <task description>]"
+lookupCommand :: String -> [Command] -> Maybe Command
+lookupCommand name commands =
+    listToMaybe $ filter ((name ==) . cmdName) commands
 
 main :: IO ()
 main = do
   args <- getArgs
   path <- taskFile
+  let commands = Commands.allCommands
+      abort = usage commands >> exitFailure
+      onCommandError :: CommandError -> IO ()
+      onCommandError (CommandError cmd msg) = do
+         putStrLn $ "Error running command '" ++ cmdName cmd ++ "':"
+         putStrLn msg
+         putStrLn $ cmdUsage cmd
 
-  case args of
-    [] -> showTasks path
-    [p, s] -> appendTask path $ task (read p) s
-    _ -> usage
+  when (null args) $ abort
+
+  let (commandName:commandArgs) = args
+
+  case lookupCommand commandName commands of
+    Nothing -> abort
+    Just cmd -> cmdHandler cmd path commandArgs
+                `catch` onCommandError
