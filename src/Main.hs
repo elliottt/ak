@@ -57,9 +57,8 @@ main = do
       abort = usage commands >> exitFailure
       onCommandError :: CommandError -> IO ()
       onCommandError (CommandError cmd msg) = do
-         putStrLn $ "Error running command '" ++ cmdName cmd ++ "':"
-         putStrLn msg
-         putStrLn $ cmdUsage cmd
+         putStrLn $ "Error running command '" ++ cmdName cmd ++ "': " ++ msg
+         putStrLn $ "Usage: " ++ cmdUsage cmd
 
   when (null args) $ abort
 
