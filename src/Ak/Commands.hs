@@ -43,7 +43,7 @@ addTask =
 
           let [pStr, s] = args
           case reads pStr of
-            ((p, _):_) -> appendTask path $ task (read p) s
+            ((p, _):_) -> appendTask path $ task p s
             _ -> throwCommandError "Priority must be an integer"
 
     in command "add"
