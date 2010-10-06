@@ -73,7 +73,7 @@ main = do
       onCommandError cmd (CommandError msg) = do
          putStrLn $ "Error running command '" ++ cmdName cmd ++ "': " ++ msg
 
-  when (null args) $ abort
+  when (null args) abort
 
   let (commandName:commandArgs) = args
 
