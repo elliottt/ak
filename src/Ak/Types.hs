@@ -3,6 +3,7 @@ module Ak.Types
     ( Priority
     , Descr
     , Task(priority, description)
+    , TaskCollection
     , Command(cmdName, cmdUsage, cmdHandler, cmdDescription)
     , CommandHandler
     , CommandError(CommandError)
@@ -29,7 +30,9 @@ data Task =
          }
     deriving (Show)
 
-type CommandHandler = FilePath -> [String] -> IO ()
+type TaskCollection = [(Priority, [Task])]
+
+type CommandHandler = Maybe FilePath -> [String] -> IO ()
 
 data Command =
     Command { cmdName :: String
@@ -38,23 +41,13 @@ data Command =
             , cmdHandler :: CommandHandler
             }
 
-instance Show Command where
-    show (Command name usage desc _) =
-        concat [ name
-               , "/"
-               , usage
-               , "/"
-               , desc
-               ]
-
 data CommandError =
-    CommandError Command String
-                 deriving (Typeable, Show)
+    CommandError String deriving (Typeable, Show)
 
 instance Exception CommandError
 
-throwCommandError :: Command -> String -> IO a
-throwCommandError cmd msg = throw $ CommandError cmd msg
+throwCommandError :: String -> IO a
+throwCommandError msg = throw $ CommandError msg
 
 task :: Priority -> Descr -> Task
 task = Task
