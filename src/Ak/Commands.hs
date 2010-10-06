@@ -6,6 +6,9 @@ module Ak.Commands
     )
 where
 
+import Control.Monad
+    ( when
+    )
 import Ak.Types
     ( Command(..)
     , throwCommandError
@@ -35,9 +38,13 @@ initialize =
 addTask :: Command
 addTask =
     let handler path args = do
-          case args of
-            [p, s] -> appendTask path $ task (read p) s
-            _ -> throwCommandError addTask "Expected 2 args"
+          when (length args /= 2) $
+               throwCommandError addTask "Expected 2 args"
+
+          let [pStr, s] = args
+          case reads pStr of
+            ((p, _):_) -> appendTask path $ task (read p) s
+            _ -> throwCommandError addTask "Priority must be an integer"
 
     in command "add"
            "add <priority> <task string>"
