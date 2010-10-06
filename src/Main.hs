@@ -3,9 +3,6 @@ module Main where
 import Prelude hiding (catch)
 import Control.Exception (catch)
 
-import Control.Applicative
-    ( (<$>)
-    )
 import Control.Monad
     ( forM_
     , when
@@ -17,7 +14,9 @@ import System.Environment
     ( getArgs
     )
 import System.Directory
-    ( getHomeDirectory
+    ( getCurrentDirectory
+    , canonicalizePath
+    , doesFileExist
     )
 import System.FilePath
     ( FilePath
@@ -30,10 +29,24 @@ import Ak.Types
     ( Command(..)
     , CommandError(..)
     )
+import Ak.Common
+    ( taskFilename
+    )
 import qualified Ak.Commands as Commands
 
-taskFile :: IO FilePath
-taskFile = (</> ".ak-tasks") <$> getHomeDirectory
+findTaskFile :: IO (Maybe FilePath)
+findTaskFile = do
+  let findTaskFile' dir =
+          if dir == "/" then return Nothing else
+              do
+                let full = dir </> taskFilename
+                e <- doesFileExist full
+                if e then
+                    return $ Just full else
+                    (canonicalizePath (dir </> "..")) >>= findTaskFile'
+
+  cur <- getCurrentDirectory
+  findTaskFile' cur
 
 usage :: [Command] -> IO ()
 usage commands = do
@@ -52,13 +65,13 @@ lookupCommand name commands =
 main :: IO ()
 main = do
   args <- getArgs
-  path <- taskFile
+  mPath <- findTaskFile
+
   let commands = Commands.allCommands
       abort = usage commands >> exitFailure
       onCommandError :: Command -> CommandError -> IO ()
       onCommandError cmd (CommandError msg) = do
          putStrLn $ "Error running command '" ++ cmdName cmd ++ "': " ++ msg
-         putStrLn $ "Usage: " ++ cmdUsage cmd
 
   when (null args) $ abort
 
@@ -66,5 +79,5 @@ main = do
 
   case lookupCommand commandName commands of
     Nothing -> abort
-    Just cmd -> cmdHandler cmd path commandArgs
+    Just cmd -> cmdHandler cmd mPath commandArgs
                 `catch` (onCommandError cmd)

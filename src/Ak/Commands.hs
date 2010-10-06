@@ -9,8 +9,15 @@ where
 import Control.Monad
     ( when
     )
+import Data.Maybe
+    ( isNothing
+    )
+import Ak.Common
+    ( taskFilename
+    )
 import Ak.Types
     ( Command(..)
+    , CommandHandler
     , throwCommandError
     , command
     , task
@@ -26,10 +33,16 @@ allCommands = [ initialize
               , showTasks
               ]
 
+requiresTaskFile :: (FilePath -> [String] -> IO ()) -> CommandHandler
+requiresTaskFile strictHandler mPath args = do
+    when (isNothing mPath) $
+         throwCommandError "No task file found; please run 'ak init'."
+    let Just path = mPath
+    strictHandler path args
+
 initialize :: Command
 initialize =
-    let handler _ args = do
-          print args
+    let handler _ _ = writeFile taskFilename ""
     in command "init"
            "init"
            "Initialize a new task file in the current directory"
@@ -49,7 +62,7 @@ addTask =
     in command "add"
            "add <priority> <task string>"
            "Add a task with the given priority (integer)"
-           handler
+           (requiresTaskFile handler)
 
 showTasks :: Command
 showTasks =
@@ -58,4 +71,4 @@ showTasks =
     in command "list"
            "list"
            "List all available tasks"
-           handler
+           (requiresTaskFile handler)

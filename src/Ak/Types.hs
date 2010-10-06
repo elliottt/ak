@@ -29,7 +29,7 @@ data Task =
          }
     deriving (Show)
 
-type CommandHandler = FilePath -> [String] -> IO ()
+type CommandHandler = Maybe FilePath -> [String] -> IO ()
 
 data Command =
     Command { cmdName :: String
