@@ -8,6 +8,12 @@ where
 
 import Control.Monad
     ( when
+    , mapM_
+    , forM_
+    )
+import Data.List
+    ( sortBy
+    , groupBy
     )
 import Data.Maybe
     ( isNothing
@@ -18,6 +24,7 @@ import Ak.Common
 import Ak.Types
     ( Command(..)
     , CommandHandler
+    , Task(priority, description)
     , throwCommandError
     , command
     , task
@@ -64,10 +71,27 @@ addTask =
            "Add a task with the given priority (integer)"
            (requiresTaskFile handler)
 
+taskPriority :: Task -> Task -> Ordering
+taskPriority a b = (priority a) `compare` (priority b)
+
+priorityGroup :: Task -> Task -> Bool
+priorityGroup a b = priority a == priority b
+
 showTasks :: Command
 showTasks =
-    let handler path _ =
-            (print =<< readTasks path `catch` (const $ return []))
+    let handler path _ = do
+          ts <- (readTasks path `catch` (const $ return []))
+          let sorted = sortBy taskPriority ts
+              groups = groupBy priorityGroup sorted
+          mapM_ printPriorityGroup groups
+
+        printPriorityGroup ts = do
+          putStrLn $ "Priority: " ++ (show $ priority $ head ts)
+          forM_ ts $ \t ->
+              putStrLn $ concat [ "  "
+                                , description t
+                                ]
+
     in command "list"
            "list"
            "List all available tasks"
