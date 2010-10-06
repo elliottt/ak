@@ -10,11 +10,16 @@ import Control.Applicative
 import Control.Monad
     ( when
     )
+import Data.List
+    ( sortBy
+    , groupBy
+    )
 import Data.Maybe
     ( catMaybes
     )
 import Ak.Types
     ( Task(..)
+    , TaskCollection
     , task
     )
 import System.FilePath
@@ -42,6 +47,16 @@ appendTask path tsk = do
   when (not e) $ writeFile path ""
   appendFile path (serialize tsk ++ "\n")
 
-readTasks :: FilePath -> IO [Task]
-readTasks path =
-    catMaybes <$> map unserialize <$> lines <$> readFile path
+taskPriority :: Task -> Task -> Ordering
+taskPriority a b = (priority a) `compare` (priority b)
+
+priorityGroup :: Task -> Task -> Bool
+priorityGroup a b = priority a == priority b
+
+readTasks :: FilePath -> IO TaskCollection
+readTasks path = do
+  taskLines <- lines <$> readFile path
+  let ts = catMaybes $ map unserialize taskLines
+      sorted = sortBy taskPriority ts
+      groups = groupBy priorityGroup sorted
+  return [ (priority $ head g, g) | g <- groups ]

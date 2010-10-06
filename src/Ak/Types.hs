@@ -3,6 +3,7 @@ module Ak.Types
     ( Priority
     , Descr
     , Task(priority, description)
+    , TaskCollection
     , Command(cmdName, cmdUsage, cmdHandler, cmdDescription)
     , CommandHandler
     , CommandError(CommandError)
@@ -28,6 +29,8 @@ data Task =
          , description :: Descr
          }
     deriving (Show)
+
+type TaskCollection = [(Priority, [Task])]
 
 type CommandHandler = Maybe FilePath -> [String] -> IO ()
 
