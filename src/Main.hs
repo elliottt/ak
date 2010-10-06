@@ -55,8 +55,8 @@ main = do
   path <- taskFile
   let commands = Commands.allCommands
       abort = usage commands >> exitFailure
-      onCommandError :: CommandError -> IO ()
-      onCommandError (CommandError cmd msg) = do
+      onCommandError :: Command -> CommandError -> IO ()
+      onCommandError cmd (CommandError msg) = do
          putStrLn $ "Error running command '" ++ cmdName cmd ++ "': " ++ msg
          putStrLn $ "Usage: " ++ cmdUsage cmd
 
@@ -67,4 +67,4 @@ main = do
   case lookupCommand commandName commands of
     Nothing -> abort
     Just cmd -> cmdHandler cmd path commandArgs
-                `catch` onCommandError
+                `catch` (onCommandError cmd)

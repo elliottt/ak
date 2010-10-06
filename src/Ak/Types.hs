@@ -38,23 +38,13 @@ data Command =
             , cmdHandler :: CommandHandler
             }
 
-instance Show Command where
-    show (Command name usage desc _) =
-        concat [ name
-               , "/"
-               , usage
-               , "/"
-               , desc
-               ]
-
 data CommandError =
-    CommandError Command String
-                 deriving (Typeable, Show)
+    CommandError String deriving (Typeable, Show)
 
 instance Exception CommandError
 
-throwCommandError :: Command -> String -> IO a
-throwCommandError cmd msg = throw $ CommandError cmd msg
+throwCommandError :: String -> IO a
+throwCommandError msg = throw $ CommandError msg
 
 task :: Priority -> Descr -> Task
 task = Task

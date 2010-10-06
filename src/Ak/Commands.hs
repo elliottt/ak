@@ -39,12 +39,12 @@ addTask :: Command
 addTask =
     let handler path args = do
           when (length args /= 2) $
-               throwCommandError addTask "Expected 2 args"
+               throwCommandError "Expected 2 args"
 
           let [pStr, s] = args
           case reads pStr of
             ((p, _):_) -> appendTask path $ task (read p) s
-            _ -> throwCommandError addTask "Priority must be an integer"
+            _ -> throwCommandError "Priority must be an integer"
 
     in command "add"
            "add <priority> <task string>"
