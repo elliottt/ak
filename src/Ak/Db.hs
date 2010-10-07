@@ -17,18 +17,27 @@ module Ak.Db (
 
     -- * Task Stores
   , TaskStore()
+  , emptyTaskStore
+  , touch
+  , makeRoot
   , loadTaskStore
   , writeTaskStore
   ) where
 
 import Ak.Types
+import Ak.IO
 
+import Control.Exception
+    ( bracket )
 import Control.Monad
     ( filterM )
 import System.Directory
     ( getCurrentDirectory, doesFileExist )
 import System.FilePath
     ( takeDirectory, (</>) )
+import System.IO
+    ( Handle, openFile, hPutStrLn, hClose, hPutStr, hPrint
+    , IOMode(ReadWriteMode) )
 import Ak.Common
     ( taskFilename )
 
@@ -75,6 +84,21 @@ data TaskStore = TaskStore
   , tsTasks :: [Task]
   } deriving (Show)
 
+instance Tasks TaskStore where
+  addTask t ts = touch ts { tsTasks = t:tsTasks ts }
+
+emptyTaskStore :: FilePath -> TaskStore
+emptyTaskStore path = TaskStore
+  { tsDirty = True
+  , tsRoot  = False
+  , tsPath  = path
+  , tsTasks = []
+  }
+
+-- | Promote a @TaskStore@ to a root.
+makeRoot :: TaskStore -> TaskStore
+makeRoot ts = ts { tsRoot = True }
+
 -- | Touching the @TaskStore@ turns it dirty, signaling that it needs to be
 -- re-written to disk.
 touch :: TaskStore -> TaskStore
@@ -97,10 +121,23 @@ loadTaskStore path = do
 writeTaskStore :: TaskStore -> IO ()
 writeTaskStore ts
   | not (tsDirty ts) = return ()
-  | otherwise        = error "need to render tasks"
+  | otherwise        = withTaskFile ts $ \ h -> do
+    writePrologue h ts
+    mapM_ (writeTask h) (tsTasks ts)
 
-instance Tasks TaskStore where
-  addTask t ts = touch ts { tsTasks = t:tsTasks ts }
+-- | Write the .ak file header
+writePrologue :: Handle -> TaskStore -> IO ()
+writePrologue h ts = hPutStrLn h
+                   $ unwords
+                   [ show (tsDirty ts)
+                   , show (tsRoot ts)
+                   ]
+
+-- | Open the .ak file for reading/writing, and run the continuation with its
+-- handle.
+withTaskFile :: TaskStore -> (Handle -> IO ()) -> IO ()
+withTaskFile ts =
+  bracket (openFile (tsPath ts) ReadWriteMode) hClose
 
 
 -- Task Databases --------------------------------------------------------------
@@ -119,4 +156,4 @@ loadDb (DbSpec paths) = error "loadDb"
 
 -- | Write out a @Db@ to the filesystem.
 writeDb :: Db -> IO ()
-writeDb (Db tss) = error "writeDb"
+writeDb (Db tss) = mapM_ writeTaskStore tss

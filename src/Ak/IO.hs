@@ -1,6 +1,10 @@
 module Ak.IO
     ( appendTask
     , readTasks
+    , writeTask
+    , readTask
+    , serialize
+    , unserialize
     )
 where
 
@@ -28,6 +32,8 @@ import System.FilePath
 import System.Directory
     ( doesFileExist
     )
+import System.IO
+    ( hGetLine, hPutStrLn, Handle )
 
 serialize :: Task -> String
 serialize tsk = pStr ++ " " ++ dStr
@@ -60,3 +66,9 @@ readTasks path = do
       sorted = sortBy taskPriority ts
       groups = groupBy priorityGroup sorted
   return [ (priority $ head g, g) | g <- groups ]
+
+writeTask :: Handle -> Task -> IO ()
+writeTask h = hPutStrLn h . serialize
+
+readTask :: Handle -> IO (Maybe Task)
+readTask h = unserialize `fmap` hGetLine h
