@@ -1,12 +1,27 @@
 module Ak.Db (
-    -- * DbSpec Utilities
+    -- * Task Database Specifications
     DbSpec
   , discoverDbSpec
   , discoverDbSpecFrom
 
+    -- * Generic Task Storage
+  , Tasks(..)
+
+    -- * Task Databases
+  , Db()
+  , loadDb
+  , writeDb
+
     -- * Path Utilities
   , directoryParents
+
+    -- * Task Stores
+  , TaskStore()
+  , loadTaskStore
+  , writeTaskStore
   ) where
+
+import Ak.Types
 
 import Control.Monad
     ( filterM )
@@ -17,11 +32,12 @@ import System.FilePath
 import Ak.Common
     ( taskFilename )
 
--- | The DbSpec describes all parent paths where a .ak file exists.
--- There is no guarantee that this is the full set of .ak files that
--- will be used when re-assembling the database, as any of them could
--- be marked as roots.
-type DbSpec = [FilePath]
+-- Database Specifications -----------------------------------------------------
+
+-- | The DbSpec describes all parent paths where a .ak file exists.  There is
+-- no guarantee that this is the full set of .ak files that will be used when
+-- re-assembling the database, as any of them could be marked as roots.
+newtype DbSpec = DbSpec [FilePath]
 
 -- | Generate a list of the parents of a filename.
 directoryParents :: FilePath -> [FilePath]
@@ -33,9 +49,74 @@ directoryParents path
 
 -- | Discover a @DbSpec@ from any directory
 discoverDbSpecFrom :: FilePath -> IO DbSpec
-discoverDbSpecFrom  =
-  filterM doesFileExist . map (</> taskFilename) . directoryParents
+discoverDbSpecFrom  = fmap DbSpec
+                    . filterM doesFileExist
+                    . map (</> taskFilename)
+                    . directoryParents
 
 -- | Discover a @DbSpec@ from the current directory.
 discoverDbSpec :: IO DbSpec
 discoverDbSpec  = discoverDbSpecFrom =<< getCurrentDirectory
+
+
+-- Generic Task Stores ---------------------------------------------------------
+
+class Tasks store where
+  -- | Add a @Task@ to the store.
+  addTask :: Task -> store -> store
+
+
+-- Task Stores -----------------------------------------------------------------
+
+data TaskStore = TaskStore
+  { tsDirty :: Bool
+  , tsRoot  :: Bool
+  , tsPath  :: FilePath
+  , tsTasks :: [Task]
+  } deriving (Show)
+
+-- | Touching the @TaskStore@ turns it dirty, signaling that it needs to be
+-- re-written to disk.
+touch :: TaskStore -> TaskStore
+touch ts = ts { tsDirty = True }
+
+-- | Load a TaskStore from the disk, raising an exception if it either doesn't
+-- exist, or could not be parsed.
+loadTaskStore :: FilePath -> IO TaskStore
+loadTaskStore path = do
+  text         <- readFile path
+  (root,tasks) <- error "need to parse tasks" text
+  return TaskStore
+    { tsDirty = False
+    , tsRoot  = root
+    , tsPath  = path
+    , tsTasks = tasks
+    }
+
+-- | Write a @TaskStore@ to disk, only if it is dirty.
+writeTaskStore :: TaskStore -> IO ()
+writeTaskStore ts
+  | not (tsDirty ts) = return ()
+  | otherwise        = error "need to render tasks"
+
+instance Tasks TaskStore where
+  addTask t ts = touch ts { tsTasks = t:tsTasks ts }
+
+
+-- Task Databases --------------------------------------------------------------
+
+-- | Task databases are just a collection of task stores, representing the .ak
+-- files as they occur when traversing up the filesystem.
+newtype Db = Db [TaskStore]
+
+instance Tasks Db where
+  addTask _ (Db [])       = Db []
+  addTask t (Db (ts:tss)) = Db (addTask t ts:tss)
+
+-- | Given a @DbSpec@, load a @Db@.
+loadDb :: DbSpec -> IO Db
+loadDb (DbSpec paths) = error "loadDb"
+
+-- | Write out a @Db@ to the filesystem.
+writeDb :: Db -> IO ()
+writeDb (Db tss) = error "writeDb"
