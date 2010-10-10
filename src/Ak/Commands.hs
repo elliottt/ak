@@ -1,77 +1,125 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Ak.Commands
-    ( allCommands
-    , initialize
-    , addTask
-    , showTasks
+    ( Command(cmdName, cmdUsage, cmdHandler, cmdDescription)
+    , CommandHandler
+    , CommandError(CommandError)
+    , throwCommandError
+    , command
+    , allCommands
+    , initializeCmd
+    , addTaskCmd
+    , showTasksCmd
     )
 where
 
+import Control.Exception
+    ( Exception
+    , throw
+    )
 import Control.Monad
     ( when
-    , mapM_
     , forM_
     )
-import Data.Maybe
-    ( isNothing
+import Data.Typeable
+    ( Typeable
+    )
+import System.Directory
+    ( getCurrentDirectory
     )
 import Ak.Common
     ( taskFilename
     )
+import Ak.Db
+    ( DbSpec
+    , loadDb
+    , writeDb
+    , Tasks(getTasks,addTask)
+    , TaskStore()
+    , makeRoot
+    , emptyTaskStore
+    , emptyDb
+    , pushTaskStore
+    , topTaskStore
+    , taskStorePath
+    )
+import Ak.Tasks
+    ( groupByPriority
+    )
 import Ak.Types
-    ( Command(..)
-    , CommandHandler
-    , Task(description)
-    , throwCommandError
-    , command
+    ( Task(description)
     , task
     )
-import Ak.IO
-    ( readTasks
-    , appendTask
-    )
+
+type CommandHandler = DbSpec -> [String] -> IO ()
+
+data Command =
+    Command { cmdName :: String
+            , cmdUsage :: String
+            , cmdDescription :: String
+            , cmdHandler :: CommandHandler
+            }
+
+data CommandError =
+    CommandError String deriving (Typeable, Show)
+
+instance Exception CommandError
+
+command :: String -> String -> String -> CommandHandler -> Command
+command = Command
+
+throwCommandError :: String -> IO a
+throwCommandError msg = throw $ CommandError msg
 
 allCommands :: [Command]
-allCommands = [ initialize
-              , addTask
-              , showTasks
+allCommands = [ initializeCmd
+              , addTaskCmd
+              , showTasksCmd
               ]
 
-requiresTaskFile :: (FilePath -> [String] -> IO ()) -> CommandHandler
-requiresTaskFile strictHandler mPath args = do
-    when (isNothing mPath) $
-         throwCommandError "No task file found; please run 'ak init'."
-    let Just path = mPath
-    strictHandler path args
+initializeArgs :: [String] -> TaskStore -> TaskStore
+initializeArgs ["--root"] = makeRoot
+initializeArgs _          = id
 
-initialize :: Command
-initialize =
-    let handler _ _ = writeFile taskFilename ""
-    in command "init"
-           "init"
-           "Initialize a new task file in the current directory"
+initializeCmd :: Command
+initializeCmd =
+  command "init"
+          "init"
+          "Initialize a new task file in the current directory"
            handler
+  where
+  handler spec args = do
+    cwd <- getCurrentDirectory
+    db  <- loadDb spec
+    let isRoot = initializeArgs args
+        newTs  = isRoot (emptyTaskStore cwd)
+        write  = writeDb (pushTaskStore newTs db)
+    case topTaskStore db of
+      Nothing -> write
+      Just tsTop
+        | taskStorePath tsTop == cwd -> return ()
+        | otherwise                  -> write
 
-addTask :: Command
-addTask =
-    let handler path args = do
-          when (length args /= 2) $
-               throwCommandError "Expected 2 args"
-
+addTaskCmd :: Command
+addTaskCmd =
+    let handler spec args = do
+          when (length args /= 2) (throwCommandError "Expected 2 args")
+          db <- loadDb spec
           let [pStr, s] = args
           case reads pStr of
-            ((p, _):_) -> appendTask path $ task p s
-            _ -> throwCommandError "Priority must be an integer"
+            ((p, _):_) -> writeDb (addTask (task p s) db)
+            _          -> throwCommandError "Priority must be an integer"
 
     in command "add"
            "add <priority> <task string>"
            "Add a task with the given priority (integer)"
-           (requiresTaskFile handler)
+           handler
 
-showTasks :: Command
-showTasks =
-    let handler path _ = do
-          col <- (readTasks path `catch` (const $ return []))
-          mapM_ printPriorityGroup col
+showTasksCmd :: Command
+showTasksCmd =
+    let handler spec _ = do
+          db  <- loadDb spec
+          mapM_ printPriorityGroup (groupByPriority (getTasks db))
 
         printPriorityGroup (p, ts) = do
           putStrLn $ "Priority: " ++ (show p)
@@ -83,4 +131,4 @@ showTasks =
     in command "list"
            "list"
            "List all available tasks"
-           (requiresTaskFile handler)
+           handler

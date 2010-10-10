@@ -1,6 +1,6 @@
 module Ak.Db (
     -- * Task Database Specifications
-    DbSpec
+    DbSpec()
   , discoverDbSpec
   , discoverDbSpecFrom
 
@@ -11,6 +11,9 @@ module Ak.Db (
   , Db()
   , loadDb
   , writeDb
+  , topTaskStore
+  , pushTaskStore
+  , emptyDb
 
     -- * Path Utilities
   , directoryParents
@@ -22,6 +25,7 @@ module Ak.Db (
   , makeRoot
   , loadTaskStore
   , writeTaskStore
+  , taskStorePath
   ) where
 
 import Ak.Types
@@ -31,12 +35,16 @@ import Control.Exception
     ( bracket )
 import Control.Monad
     ( filterM )
+import Data.List
+    ( isPrefixOf )
+import Data.Maybe
+    ( listToMaybe )
 import System.Directory
     ( getCurrentDirectory, doesFileExist )
 import System.FilePath
     ( takeDirectory, (</>) )
 import System.IO
-    ( Handle, openFile, hPutStrLn, hClose, hPutStr, hPrint
+    ( Handle, openFile, hClose, hPutStrLn
     , IOMode(ReadWriteMode) )
 import Ak.Common
     ( taskFilename )
@@ -71,8 +79,17 @@ discoverDbSpec  = discoverDbSpecFrom =<< getCurrentDirectory
 -- Generic Task Stores ---------------------------------------------------------
 
 class Tasks store where
+  -- | Get all the tasks from a store.
+  getTasks :: store -> [Task]
+
   -- | Add a @Task@ to the store.
   addTask :: Task -> store -> store
+
+  -- | Find a @Task@ in the store.
+  findTask :: String -> store -> [Task]
+
+  -- | Remove a @Task@ from the store.
+  remTask :: Task -> store -> store
 
 
 -- Task Stores -----------------------------------------------------------------
@@ -85,7 +102,12 @@ data TaskStore = TaskStore
   } deriving (Show)
 
 instance Tasks TaskStore where
+  getTasks     = tsTasks
   addTask t ts = touch ts { tsTasks = t:tsTasks ts }
+  findTask pfx = filter ((pfx `isPrefixOf`) . description) . tsTasks
+  remTask t ts = touch ts { tsTasks = filter p (tsTasks ts) }
+    where
+    p t' = description t' /= description t
 
 emptyTaskStore :: FilePath -> TaskStore
 emptyTaskStore path = TaskStore
@@ -98,6 +120,10 @@ emptyTaskStore path = TaskStore
 -- | Promote a @TaskStore@ to a root.
 makeRoot :: TaskStore -> TaskStore
 makeRoot ts = ts { tsRoot = True }
+
+-- | The path of a @TaskStore@.
+taskStorePath :: TaskStore -> FilePath
+taskStorePath  = tsPath
 
 -- | Touching the @TaskStore@ turns it dirty, signaling that it needs to be
 -- re-written to disk.
@@ -147,13 +173,28 @@ withTaskFile ts =
 newtype Db = Db [TaskStore]
 
 instance Tasks Db where
+  getTasks (Db tss)       = concatMap getTasks tss
   addTask _ (Db [])       = Db []
   addTask t (Db (ts:tss)) = Db (addTask t ts:tss)
+  findTask pfx (Db tss)   = concatMap (findTask pfx) tss
+  remTask t (Db tss)      = Db (map (remTask t) tss)
 
 -- | Given a @DbSpec@, load a @Db@.
 loadDb :: DbSpec -> IO Db
-loadDb (DbSpec paths) = error "loadDb"
+loadDb (DbSpec paths) = Db `fmap` mapM loadTaskStore paths
 
 -- | Write out a @Db@ to the filesystem.
 writeDb :: Db -> IO ()
 writeDb (Db tss) = mapM_ writeTaskStore tss
+
+-- | Empty @Db@.
+emptyDb :: Db
+emptyDb  = Db []
+
+-- | Get the closest @TaskStore@.
+topTaskStore :: Db -> Maybe TaskStore
+topTaskStore (Db tss) = listToMaybe tss
+
+-- | Push a @TaskStore@ on to a @Db@.
+pushTaskStore :: TaskStore -> Db -> Db
+pushTaskStore ts (Db tss) = Db (ts:tss)

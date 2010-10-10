@@ -13,40 +13,16 @@ import Data.Maybe
 import System.Environment
     ( getArgs
     )
-import System.Directory
-    ( getCurrentDirectory
-    , canonicalizePath
-    , doesFileExist
-    )
-import System.FilePath
-    ( FilePath
-    , (</>)
-    )
 import System.Exit
     ( exitFailure
     )
-import Ak.Types
+import Ak.Commands
     ( Command(..)
     , CommandError(..)
     )
-import Ak.Common
-    ( taskFilename
-    )
+import Ak.Db
+    ( discoverDbSpec )
 import qualified Ak.Commands as Commands
-
-findTaskFile :: IO (Maybe FilePath)
-findTaskFile = do
-  let findTaskFile' dir =
-          if dir == "/" then return Nothing else
-              do
-                let full = dir </> taskFilename
-                e <- doesFileExist full
-                if e then
-                    return $ Just full else
-                    (canonicalizePath (dir </> "..")) >>= findTaskFile'
-
-  cur <- getCurrentDirectory
-  findTaskFile' cur
 
 usage :: [Command] -> IO ()
 usage commands = do
@@ -65,7 +41,7 @@ lookupCommand name commands =
 main :: IO ()
 main = do
   args <- getArgs
-  mPath <- findTaskFile
+  spec <- discoverDbSpec
 
   let commands = Commands.allCommands
       abort = usage commands >> exitFailure
@@ -79,5 +55,5 @@ main = do
 
   case lookupCommand commandName commands of
     Nothing -> abort
-    Just cmd -> cmdHandler cmd mPath commandArgs
+    Just cmd -> cmdHandler cmd spec commandArgs
                 `catch` (onCommandError cmd)
